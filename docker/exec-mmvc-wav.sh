@@ -50,4 +50,8 @@ echo "Starting MMVC Wav Converter Server on $HOST:$PORT"
 echo "Model directory: $MODEL_DIR"
 echo "Sample mode: $SAMPLE_MODE"
 
-python MMVCServerSIO.py -p $PORT --host $HOST $HTTPS_OPTION --model_dir $MODEL_DIR --sample_mode $SAMPLE_MODE --allowed-origins '*' 
+# 環境変数を設定
+export PYTHONPATH=$PYTHONPATH:/voice-changer
+
+# 新しいコンバーターアプリを起動
+python3 wav_converter.py 

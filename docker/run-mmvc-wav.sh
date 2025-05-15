@@ -71,9 +71,21 @@ echo "MMVCサーバーコンテナを開始します..."
 echo "ポート: $PORT"
 echo "モデルディレクトリ: $MODEL_DIR"
 
-docker run -it --gpus all \
-    --name $CONTAINER_NAME \
-    -p $PORT:$PORT \
-    -e EX_PORT=$PORT \
-    -v "$MODEL_DIR":/voice-changer/server/model_dir \
-    $IMAGE_NAME:$TAG 
+if command -v nvidia-smi &> /dev/null; then
+    # NVIDIA GPUが利用可能な場合
+    docker run -it --gpus all \
+        --name $CONTAINER_NAME \
+        -p $PORT:$PORT \
+        -e EX_PORT=$PORT \
+        -v "$MODEL_DIR":/voice-changer/server/model_dir \
+        $IMAGE_NAME:$TAG
+else
+    # GPUが利用できない場合
+    echo "GPUが検出されませんでした。CPUモードで実行します。"
+    docker run -it \
+        --name $CONTAINER_NAME \
+        -p $PORT:$PORT \
+        -e EX_PORT=$PORT \
+        -v "$MODEL_DIR":/voice-changer/server/model_dir \
+        $IMAGE_NAME:$TAG
+fi 

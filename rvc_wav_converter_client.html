@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RVC WAV変換クライアント</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="file"], input[type="number"], input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="range"] {
+            height: 30px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .result h3 {
+            margin-top: 0;
+        }
+        .model-info {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .output-controls {
+            display: none;
+            margin-top: 20px;
+        }
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+        .slider-value {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+        }
+        .loading {
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+        .loading img {
+            width: 50px;
+            height: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>RVC WAV変換クライアント</h1>
+    
+    <div class="container">
+        <div class="model-info" id="modelInfo">
+            <h3>モデル情報を読み込み中...</h3>
+        </div>
+        
+        <form id="convertForm">
+            <div class="form-group">
+                <label for="wavFile">WAVファイルを選択:</label>
+                <input type="file" id="wavFile" accept=".wav" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="f0UpKey">音程変更 (半音): <span class="slider-value" id="f0Value">0</span></label>
+                <input type="range" id="f0UpKey" min="-12" max="12" value="0" step="1">
+            </div>
+            
+            <div class="form-group">
+                <label for="indexRatio">インデックス比率: <span class="slider-value" id="indexValue">0</span></label>
+                <input type="range" id="indexRatio" min="0" max="1" value="0" step="0.05">
+            </div>
+            
+            <div class="form-group">
+                <label for="protect">保護率: <span class="slider-value" id="protectValue">0.5</span></label>
+                <input type="range" id="protect" min="0" max="1" value="0.5" step="0.05">
+            </div>
+            
+            <button type="submit" id="convertButton">変換開始</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <p>変換中...</p>
+        </div>
+        
+        <div class="output-controls" id="outputControls">
+            <h3>変換結果</h3>
+            <audio id="outputAudio" controls></audio>
+            <p><a id="downloadLink" href="#" download="converted.wav">変換後のファイルをダウンロード</a></p>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // サーバーURLの設定
+            const serverUrl = 'http://localhost:18888';
+            
+            // モデル情報の取得
+            fetch(`${serverUrl}/convert_model_info`)
+                .then(response => response.json())
+                .then(data => {
+                    const modelInfoDiv = document.getElementById('modelInfo');
+                    if (data.model_loaded) {
+                        let infoHtml = `<h3>モデル情報</h3>`;
+                        infoHtml += `<p>モデルステータス: ロード済み</p>`;
+                        
+                        if (data.model_info) {
+                            if (data.model_info.pipelineInfo && data.model_info.pipelineInfo !== "None") {
+                                infoHtml += `<p>パイプライン: ${data.model_info.pipelineInfo}</p>`;
+                            }
+                            infoHtml += `<p>F0検出器: ${data.model_info.f0Detector || "不明"}</p>`;
+                        }
+                        
+                        modelInfoDiv.innerHTML = infoHtml;
+                    } else {
+                        modelInfoDiv.innerHTML = `<h3>モデル情報</h3><p>警告: モデルがロードされていません。簡易変換のみ可能です。</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('モデル情報の取得中にエラー:', error);
+                    document.getElementById('modelInfo').innerHTML = `<h3>モデル情報</h3><p>エラー: サーバーに接続できません</p>`;
+                });
+            
+            // スライダー値の表示更新
+            document.getElementById('f0UpKey').addEventListener('input', function() {
+                document.getElementById('f0Value').textContent = this.value;
+            });
+            
+            document.getElementById('indexRatio').addEventListener('input', function() {
+                document.getElementById('indexValue').textContent = this.value;
+            });
+            
+            document.getElementById('protect').addEventListener('input', function() {
+                document.getElementById('protectValue').textContent = this.value;
+            });
+            
+            // 変換フォームの送信処理
+            document.getElementById('convertForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const wavFile = document.getElementById('wavFile').files[0];
+                if (!wavFile) {
+                    alert('WAVファイルを選択してください');
+                    return;
+                }
+                
+                const f0UpKey = document.getElementById('f0UpKey').value;
+                const indexRatio = document.getElementById('indexRatio').value;
+                const protect = document.getElementById('protect').value;
+                
+                // フォームデータの作成
+                const formData = new FormData();
+                formData.append('file', wavFile);
+                formData.append('output_filename', `converted_${wavFile.name}`);
+                formData.append('f0_up_key', f0UpKey);
+                formData.append('index_ratio', indexRatio);
+                formData.append('protect', protect);
+                
+                // ローディング表示
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('convertButton').disabled = true;
+                document.getElementById('outputControls').style.display = 'none';
+                
+                // サーバーにリクエスト送信
+                fetch(`${serverUrl}/convert_wav_file`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(`サーバーエラー: ${data.error}`);
+                        });
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    
+                    // 音声プレーヤーの設定
+                    const audio = document.getElementById('outputAudio');
+                    audio.src = url;
+                    
+                    // ダウンロードリンクの設定
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = url;
+                    downloadLink.download = `converted_${wavFile.name}`;
+                    
+                    // 結果表示
+                    document.getElementById('outputControls').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('変換中にエラー:', error);
+                    alert(`エラー: ${error.message}`);
+                })
+                .finally(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('convertButton').disabled = false;
+                });
+            });
+        });
+    </script>
+</body>
+</html> 
