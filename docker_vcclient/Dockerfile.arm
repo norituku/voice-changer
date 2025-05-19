@@ -1,0 +1,28 @@
+FROM arm64v8/ubuntu:22.04
+
+# Install system dependencies
+RUN apt-get update \
+        && apt-get install -y python3-pip espeak gosu libsndfile1-dev emacs git cmake \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /
+ADD dummy /
+
+RUN git clone https://github.com/w-okada/voice-changer.git -b v.1.5.3.13
+
+# Create modified requirements file excluding GPU packages and problematic builds
+RUN chmod 0777 /voice-changer/server
+WORKDIR /voice-changer/server
+RUN grep -v -E 'onnxruntime-gpu|onnxsim' requirements.txt > requirements_arm.txt
+
+# Install packages with ARM compatibility in separate steps for better error handling
+RUN pip install numpy==1.23.5
+RUN pip install pyworld==0.3.3 --no-build-isolation
+RUN pip install -r requirements_arm.txt
+RUN pip install onnxruntime
+
+ADD /setup.sh  /voice-changer/server
+ADD /exec.sh  /voice-changer/server
+
+ENTRYPOINT ["/bin/bash", "setup.sh"]
