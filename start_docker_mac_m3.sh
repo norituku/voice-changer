@@ -40,7 +40,7 @@ else
 fi
 
 echo "VC Client starting for Mac M3..."
-docker run -it --rm --shm-size=1024M \
+CONTAINER_ID=$(docker run -d --rm --shm-size=1024M \
 -e EX_IP="`hostname -I 2>/dev/null || hostname`" \
 -e EX_PORT=${EX_PORT} \
 -e LOCAL_UID=$(id -u $USER) \
@@ -48,17 +48,20 @@ docker run -it --rm --shm-size=1024M \
 -v `pwd`/docker_folder/model_dir:/voice-changer/server/model_dir \
 -v `pwd`/docker_folder/pretrain:/voice-changer/server/pretrain \
 -p ${EX_PORT}:18888 \
-$DOCKER_IMAGE -p 18888 --https true \
-    --content_vec_500 pretrain/checkpoint_best_legacy_500.pt  \
-    --content_vec_500_onnx pretrain/content_vec_500.onnx \
-    --content_vec_500_onnx_on true \
-    --hubert_base pretrain/hubert_base.pt \
-    --hubert_base_jp pretrain/rinna_hubert_base_jp.pt \
-    --hubert_soft pretrain/hubert/hubert-soft-0d54a1f4.pt \
-    --nsf_hifigan pretrain/nsf_hifigan/model \
-    --crepe_onnx_full pretrain/crepe_onnx_full.onnx \
-    --crepe_onnx_tiny pretrain/crepe_onnx_tiny.onnx \
-    --rmvpe pretrain/rmvpe.pt \
+$DOCKER_IMAGE python3 MMVCServerSIO.py -p 18888 --https true \
     --model_dir model_dir \
-    --samples samples.json \
-    --onnxgpu -1
+    --debug true \
+    --onnxgpu -1)
+
+echo "Container started with ID: $CONTAINER_ID"
+echo "Waiting for server to initialize..."
+sleep 5
+
+# Check if container is still running
+if docker ps | grep -q $CONTAINER_ID; then
+    echo "Server is running! Access https://localhost:${EX_PORT} in your browser."
+    echo "To stop the server, run: docker stop $CONTAINER_ID"
+else
+    echo "Server failed to start. Checking logs:"
+    docker logs $CONTAINER_ID || echo "Container has already exited. No logs available."
+fi
